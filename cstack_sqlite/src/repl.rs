@@ -1,4 +1,7 @@
-use crate::{statement::Statement, table::Table};
+use crate::{
+    statement::{Statement, StatementError},
+    table::Table,
+};
 use std::io::{stdin, stdout, Write};
 
 pub struct REPL {}
@@ -25,14 +28,22 @@ impl REPL {
                         continue;
                     }
                     value => {
-                        if let Ok(mut statement) = Statement::new(value) {
+                        let statement = Statement::new(value);
+                        if let Ok(mut statement) = statement {
                             if let Ok(_) = statement.execute(&mut table) {
                                 println!("Executed.")
                             } else {
                                 println!("command execution failed")
                             }
-                        } else {
-                            println!("Unrecognized keyword at start of '{}'", value)
+                        } else if let Err(e) = statement {
+                            match e {
+                                StatementError::SynthaxError(t) => {
+                                    println!("Syntax error. Could not parse statement: {}", t)
+                                }
+                                StatementError::UnrecognisedStatement => {
+                                    println!("Unrecognized keyword at start of '{}'", value)
+                                }
+                            }
                         }
                     }
                 }

@@ -36,6 +36,7 @@ impl Row {
     }
 
     pub fn deserialize(src: &[u8]) -> Self {
+        // TODO: handle extra null bytes better
         let id: [u8; 4] = src[ID_OFFSET..ID_SIZE]
             .try_into()
             .expect("could not deserialize id");

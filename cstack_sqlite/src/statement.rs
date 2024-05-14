@@ -10,6 +10,7 @@ pub enum Statement {
 
 pub enum StatementError {
     UnrecognisedStatement,
+    SynthaxError(String),
 }
 
 pub enum ExecuteError {
@@ -29,12 +30,18 @@ impl Statement {
 
                 let id = tokens
                     .next()
-                    .expect("invalid id")
+                    .ok_or(StatementError::SynthaxError("invalid id".to_string()))?
                     .parse::<u32>()
-                    .expect("invalid id: non integer");
+                    .map_err(|_| {
+                        StatementError::SynthaxError("invalid integer value for id".to_string())
+                    })?;
 
-                let username = tokens.next().expect("invalid username");
-                let email = tokens.next().expect("invalid email");
+                let username = tokens
+                    .next()
+                    .ok_or(StatementError::SynthaxError("invalid username".to_string()))?;
+                let email = tokens
+                    .next()
+                    .ok_or(StatementError::SynthaxError("invalid email".to_string()))?;
                 let row = Row::new(id, username.to_string(), email.to_string());
                 Statement::Insert { row }
             }
