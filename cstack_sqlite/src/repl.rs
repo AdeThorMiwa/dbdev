@@ -1,8 +1,8 @@
 use crate::{
-    statement::{Statement, StatementError},
+    statement::{ExecuteError, Statement, StatementError},
     table::Table,
 };
-use std::io::{stdin, stdout, Write};
+use std::io::{stdin, stdout, ErrorKind, Write};
 
 pub struct REPL {}
 
@@ -16,41 +16,51 @@ impl REPL {
         'repl: loop {
             self.prompt();
             if let Some(input) = self.read_input() {
-                match input.trim() {
-                    value if value.is_empty() => continue,
-                    ".exit" => {
-                        break 'repl;
-                    }
-                    value if value.starts_with(".") => {
-                        if let Err(_) = crate::meta::handlers::handle(value) {
-                            println!("Unrecognised command '{}'", value)
-                        }
-                        continue;
-                    }
-                    value => {
-                        let statement = Statement::new(value);
-                        if let Ok(mut statement) = statement {
-                            if let Ok(_) = statement.execute(&mut table) {
-                                println!("Executed.")
-                            } else {
-                                println!("command execution failed")
-                            }
-                        } else if let Err(e) = statement {
-                            match e {
-                                StatementError::SynthaxError(t) => {
-                                    println!("Syntax error. Could not parse statement: {}", t)
-                                }
-                                StatementError::UnrecognisedStatement => {
-                                    println!("Unrecognized keyword at start of '{}'", value)
-                                }
-                            }
-                        }
-                    }
+                if let Err(_) = self.handle_input(&input, &mut table) {
+                    break 'repl;
                 }
             }
         }
 
         Ok(())
+    }
+
+    fn handle_input(&self, input: &str, table: &mut Table) -> std::io::Result<()> {
+        match input.trim() {
+            value if value.is_empty() => Ok(()),
+            ".exit" => Err(std::io::Error::new(ErrorKind::UnexpectedEof, "Exit")),
+            value if value.starts_with(".") => {
+                if let Err(_) = crate::meta::handlers::handle(value) {
+                    println!("Unrecognised command '{}'", value)
+                }
+                Ok(())
+            }
+            value => {
+                let statement = Statement::new(value);
+                if let Ok(mut statement) = statement {
+                    match statement.execute(table) {
+                        Ok(_) => println!("Executed."),
+                        Err(ExecuteError::TableFull) => {
+                            println!("Error: Table Full")
+                        }
+                        Err(ExecuteError::SerializationFail(s)) => println!("{}", s),
+                    }
+                } else if let Err(e) = statement {
+                    match e {
+                        StatementError::SynthaxError(t) => {
+                            println!("Syntax Error: {}", t)
+                        }
+                        StatementError::UnrecognisedStatement => {
+                            println!("Unrecognized keyword at start of '{}'", value)
+                        }
+                        StatementError::ValidationError(s) => {
+                            println!("Validation Error: {}", s)
+                        }
+                    }
+                }
+                Ok(())
+            }
+        }
     }
 
     fn prompt(&self) {

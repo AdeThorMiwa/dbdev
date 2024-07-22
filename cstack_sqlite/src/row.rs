@@ -13,6 +13,10 @@ pub struct Row {
     email: String,
 }
 
+pub enum RowSerializationError {
+    StringTooLong { field: String },
+}
+
 impl Row {
     pub fn new(id: u32, username: String, email: String) -> Self {
         Self {
@@ -22,17 +26,49 @@ impl Row {
         }
     }
 
-    pub fn serialize(&self, dest: &mut [u8]) {
-        dest[ID_OFFSET..USERNAME_OFFSET].copy_from_slice(&self.id.to_be_bytes());
+    fn serialize_string_column(
+        column_name: &str,
+        column_value: &str,
+        column_size: usize,
+        offset: usize,
+        dest: &mut [u8],
+    ) -> Result<(), RowSerializationError> {
+        let mut field_to_vec = vec![0; column_size];
+        let field_bytes = column_value.as_bytes();
+        if field_bytes.len() > column_size {
+            return Err(RowSerializationError::StringTooLong {
+                field: column_name.to_string(),
+            });
+        }
+        let (lbytes, rbytes) = field_to_vec.split_at_mut(field_bytes.len());
+        lbytes.copy_from_slice(field_bytes);
 
-        let username_bytes = self.username.as_bytes();
-        let username_len = usize::min(username_bytes.len(), USERNAME_SIZE);
-        dest[USERNAME_OFFSET..(USERNAME_OFFSET + username_len)]
-            .copy_from_slice(&username_bytes[..username_len]);
+        let field_final_byte_value = [lbytes, rbytes].concat();
+        dest[offset..(offset + column_size)].copy_from_slice(&field_final_byte_value[..]);
+        Ok(())
+    }
 
-        let email_bytes = self.email.as_bytes();
-        let email_len = usize::min(email_bytes.len(), EMAIL_SIZE);
-        dest[EMAIL_OFFSET..(EMAIL_OFFSET + email_len)].copy_from_slice(&email_bytes[..email_len]);
+    fn serialize_integer_column(
+        #[allow(unused)] column_name: &str,
+        column_value: u32,
+        column_size: usize,
+        offset: usize,
+        dest: &mut [u8],
+    ) -> Result<(), RowSerializationError> {
+        dest[offset..(offset + column_size)].copy_from_slice(&column_value.to_be_bytes());
+        Ok(())
+    }
+
+    pub fn serialize(&mut self, dest: &mut [u8]) -> Result<(), RowSerializationError> {
+        Self::serialize_integer_column("id", self.id, ID_SIZE, ID_OFFSET, dest)?;
+        Self::serialize_string_column(
+            "username",
+            &self.username,
+            USERNAME_SIZE,
+            USERNAME_OFFSET,
+            dest,
+        )?;
+        Self::serialize_string_column("email", &self.email, EMAIL_SIZE, EMAIL_OFFSET, dest)
     }
 
     pub fn deserialize(src: &[u8]) -> Self {
@@ -42,11 +78,12 @@ impl Row {
             .expect("could not deserialize id");
         let id = u32::from_be_bytes(id);
 
-        let username = String::from_utf8(src[USERNAME_OFFSET..USERNAME_SIZE].to_vec())
-            .expect("could not deserialize username")
-            .trim_matches(char::from(0))
-            .to_string();
-        let email = String::from_utf8(src[EMAIL_OFFSET..EMAIL_SIZE].to_vec())
+        let username =
+            String::from_utf8(src[USERNAME_OFFSET..(USERNAME_OFFSET + USERNAME_SIZE)].to_vec())
+                .expect("could not deserialize username")
+                .trim_matches(char::from(0))
+                .to_string();
+        let email = String::from_utf8(src[EMAIL_OFFSET..(EMAIL_OFFSET + EMAIL_SIZE)].to_vec())
             .expect("could not deserialize email")
             .trim_matches(char::from(0))
             .to_string();

@@ -1,5 +1,5 @@
 use crate::{
-    row::{Row, ROW_SIZE},
+    row::{Row, RowSerializationError, ROW_SIZE},
     table::Table,
 };
 
@@ -11,10 +11,12 @@ pub enum Statement {
 pub enum StatementError {
     UnrecognisedStatement,
     SynthaxError(String),
+    ValidationError(String),
 }
 
 pub enum ExecuteError {
     TableFull,
+    SerializationFail(String),
 }
 
 impl Statement {
@@ -33,7 +35,7 @@ impl Statement {
                     .ok_or(StatementError::SynthaxError("invalid id".to_string()))?
                     .parse::<u32>()
                     .map_err(|_| {
-                        StatementError::SynthaxError("invalid integer value for id".to_string())
+                        StatementError::ValidationError("Integer value for 'id' cannot be negative".to_string())
                     })?;
 
                 let username = tokens
@@ -57,13 +59,18 @@ impl Statement {
         }
     }
 
-    fn execute_insert(row: &Row, table: &mut Table) -> Result<(), ExecuteError> {
+    fn execute_insert(row: &mut Row, table: &mut Table) -> Result<(), ExecuteError> {
         if table.num_rows >= table.max_rows() as u32 {
             return Err(ExecuteError::TableFull);
         }
 
         let row_slot = table.get_row_slot(table.num_rows);
-        row.serialize(&mut row_slot[..ROW_SIZE]);
+        row.serialize(&mut row_slot[..ROW_SIZE])
+            .map_err(|e| match e {
+                RowSerializationError::StringTooLong { field } => {
+                    ExecuteError::SerializationFail(format!("String value for '{field}' too long."))
+                }
+            })?;
         table.increment_num_rows();
 
         Ok(())
