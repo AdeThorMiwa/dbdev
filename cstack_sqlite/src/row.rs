@@ -33,34 +33,32 @@ impl Row {
         offset: usize,
         dest: &mut [u8],
     ) -> Result<(), RowSerializationError> {
-        let mut field_to_vec = vec![0; column_size];
-        let field_bytes = column_value.as_bytes();
-        if field_bytes.len() > column_size {
+        let mut column_buf = vec![0; column_size];
+        let column_value_len = column_value.as_bytes().len();
+        if column_value_len > column_size {
             return Err(RowSerializationError::StringTooLong {
                 field: column_name.to_string(),
             });
         }
-        let (lbytes, rbytes) = field_to_vec.split_at_mut(field_bytes.len());
-        lbytes.copy_from_slice(field_bytes);
+        let (msbytes, lsbytes) = column_buf.split_at_mut(column_value_len);
+        msbytes.copy_from_slice(column_value.as_bytes());
 
-        let field_final_byte_value = [lbytes, rbytes].concat();
-        dest[offset..(offset + column_size)].copy_from_slice(&field_final_byte_value[..]);
+        let column_buf = [msbytes, lsbytes].concat();
+        dest[offset..(offset + column_size)].copy_from_slice(&column_buf[..]);
         Ok(())
     }
 
     fn serialize_integer_column(
-        #[allow(unused)] column_name: &str,
         column_value: u32,
         column_size: usize,
         offset: usize,
         dest: &mut [u8],
-    ) -> Result<(), RowSerializationError> {
+    ) {
         dest[offset..(offset + column_size)].copy_from_slice(&column_value.to_be_bytes());
-        Ok(())
     }
 
     pub fn serialize(&mut self, dest: &mut [u8]) -> Result<(), RowSerializationError> {
-        Self::serialize_integer_column("id", self.id, ID_SIZE, ID_OFFSET, dest)?;
+        Self::serialize_integer_column(self.id, ID_SIZE, ID_OFFSET, dest);
         Self::serialize_string_column(
             "username",
             &self.username,

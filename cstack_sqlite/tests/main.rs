@@ -1,4 +1,4 @@
-use utils::{result_match, run_script_exec};
+use utils::{gen_random_filename, result_match, run_script_exec, run_script_exec_with_defaults};
 mod utils;
 
 // TODO: dry out test cases with a macro
@@ -7,7 +7,7 @@ mod utils;
 #[test]
 fn inserts_and_retrieves_row() {
     let scripts = vec!["insert 1 user1 person1@example.com", "select", ".exit"];
-    let results = run_script_exec(scripts);
+    let results = run_script_exec_with_defaults(scripts);
     result_match(
         results,
         vec![
@@ -26,7 +26,7 @@ fn print_error_message_when_table_is_full() {
         scripts.push(format!("insert {i} user{i} person{i}@example.com"));
     }
     scripts.push(".exit".to_owned());
-    let results = run_script_exec(scripts);
+    let results = run_script_exec_with_defaults(scripts);
 
     assert_eq!(results[results.len() - 2], "csquarelite> Error: Table Full")
 }
@@ -40,7 +40,7 @@ fn allows_inserting_strings_that_are_max_length() {
         "select".to_string(),
         ".exit".to_string(),
     ];
-    let results = run_script_exec(scripts);
+    let results = run_script_exec_with_defaults(scripts);
 
     result_match(
         results,
@@ -64,7 +64,7 @@ fn prints_error_message_if_strings_are_too_long() {
         ".exit".to_string(),
     ];
 
-    let results = run_script_exec(scripts);
+    let results = run_script_exec_with_defaults(scripts);
 
     result_match(
         results,
@@ -79,13 +79,32 @@ fn prints_error_message_if_strings_are_too_long() {
 #[test]
 fn prints_an_error_message_if_id_is_negative() {
     let scripts = vec!["insert -1 cstack foo@bar.com", "select", ".exit"];
-    let results = run_script_exec(scripts);
+    let results = run_script_exec_with_defaults(scripts);
 
     result_match(
         results,
         vec![
             "csquarelite> Validation Error: Integer value for 'id' cannot be negative",
             "csquarelite> Executed.",
+            "csquarelite> ",
+        ],
+    );
+}
+
+#[test]
+fn keeps_data_after_closing_connection() {
+    let db_filename = gen_random_filename();
+    let scripts = vec!["insert 1 user1 person1@example.com", ".exit"];
+    let results = run_script_exec(scripts, Some(db_filename.to_owned()), false);
+    result_match(results, vec!["csquarelite> Executed.", "csquarelite> "]);
+
+    let scripts = vec!["select", ".exit"];
+    let results = run_script_exec(scripts, Some(db_filename), true);
+    result_match(
+        results,
+        vec![
+            "csquarelite> Row { id: 1, username: \"user1\", email: \"person1@example.com\" }",
+            "Executed.",
             "csquarelite> ",
         ],
     );

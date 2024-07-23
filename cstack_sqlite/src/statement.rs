@@ -60,11 +60,11 @@ impl Statement {
     }
 
     fn execute_insert(row: &mut Row, table: &mut Table) -> Result<(), ExecuteError> {
-        if table.num_rows >= table.max_rows() as u32 {
+        if table.get_row_len() >= table.max_rows()  {
             return Err(ExecuteError::TableFull);
         }
 
-        let row_slot = table.get_row_slot(table.num_rows);
+        let row_slot = table.get_row_slot(table.get_row_len());
         row.serialize(&mut row_slot[..ROW_SIZE])
             .map_err(|e| match e {
                 RowSerializationError::StringTooLong { field } => {
@@ -78,7 +78,7 @@ impl Statement {
 
     fn execute_select(table: &mut Table) -> Result<(), ExecuteError> {
         let mut i = 0;
-        while i < table.num_rows {
+        while i < table.get_row_len() {
             let row_slot = table.get_row_slot(i);
             let row = Row::deserialize(&row_slot[..ROW_SIZE]);
             println!("{:?}", row);
