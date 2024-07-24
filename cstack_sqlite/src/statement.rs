@@ -1,4 +1,5 @@
 use crate::{
+    cursor::Cursor,
     row::{Row, RowSerializationError, ROW_SIZE},
     table::Table,
 };
@@ -35,7 +36,9 @@ impl Statement {
                     .ok_or(StatementError::SynthaxError("invalid id".to_string()))?
                     .parse::<u32>()
                     .map_err(|_| {
-                        StatementError::ValidationError("Integer value for 'id' cannot be negative".to_string())
+                        StatementError::ValidationError(
+                            "Integer value for 'id' cannot be negative".to_string(),
+                        )
                     })?;
 
                 let username = tokens
@@ -59,30 +62,33 @@ impl Statement {
         }
     }
 
-    fn execute_insert(row: &mut Row, table: &mut Table) -> Result<(), ExecuteError> {
-        if table.get_row_len() >= table.max_rows()  {
+    fn execute_insert(row: &mut Row, mut table: &mut Table) -> Result<(), ExecuteError> {
+        if table.get_row_len() >= table.max_rows() {
             return Err(ExecuteError::TableFull);
         }
 
-        let row_slot = table.get_row_slot(table.get_row_len());
-        row.serialize(&mut row_slot[..ROW_SIZE])
+        let mut cursor = Cursor::end(&mut table);
+        let cursor_pos = cursor.get_cursor_pos();
+
+        row.serialize(&mut cursor_pos[..ROW_SIZE])
             .map_err(|e| match e {
                 RowSerializationError::StringTooLong { field } => {
                     ExecuteError::SerializationFail(format!("String value for '{field}' too long."))
                 }
             })?;
+
         table.increment_num_rows();
 
         Ok(())
     }
 
-    fn execute_select(table: &mut Table) -> Result<(), ExecuteError> {
-        let mut i = 0;
-        while i < table.get_row_len() {
-            let row_slot = table.get_row_slot(i);
-            let row = Row::deserialize(&row_slot[..ROW_SIZE]);
+    fn execute_select(mut table: &mut Table) -> Result<(), ExecuteError> {
+        let mut cursor = Cursor::start(&mut table);
+        while !cursor.end_of_table() {
+            let cursor_pos = cursor.get_cursor_pos();
+            let row = Row::deserialize(&cursor_pos[..ROW_SIZE]);
             println!("{:?}", row);
-            i += 1;
+            cursor.advance();
         }
         Ok(())
     }

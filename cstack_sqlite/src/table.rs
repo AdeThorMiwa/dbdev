@@ -22,7 +22,7 @@ impl<'a> Table {
         Self { pager, num_rows }
     }
 
-    pub fn get_row_slot(&mut self, row_num: usize) -> &mut [u8] {
+    pub fn get_cursor_at_pos(&mut self, row_num: usize) -> &mut [u8] {
         let page_num = row_num / TABLE_ROWS_PER_PAGE;
 
         let page = self.pager.get_page_mut(page_num);

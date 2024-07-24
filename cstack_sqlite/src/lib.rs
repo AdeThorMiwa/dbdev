@@ -1,3 +1,4 @@
+pub mod cursor;
 pub mod db;
 pub mod meta;
 pub mod pager;
