@@ -1,45 +1,50 @@
 use crate::table::Table;
 
-pub struct Cursor<'a> {
-    row_count: usize,
-    end_of_table: bool,
-    pub table: &'a mut Table,
+pub struct Cursor {
+    pub(self) page: usize,
+    pub(self) cell: usize,
+    pub(self) end_of_table: bool,
 }
 
-impl<'a> Cursor<'a> {
-    pub fn start(table: &'a mut Table) -> Self {
-        let end_of_table = table.get_row_len() == 0;
+impl Cursor {
+    pub fn start(table: &mut Table) -> Self {
+        let root_page_num = table.get_root_page_num();
+        let root_page = table.pager.get_page_mut(root_page_num);
+        let end_of_table = root_page.cell_count() == 0;
+
         Self {
-            row_count: 0,
+            page: root_page_num,
+            cell: 0,
             end_of_table,
-            table,
         }
     }
 
-    pub fn end(table: &'a mut Table) -> Self {
-        let row_count = table.get_row_len();
+    pub fn end(table: &mut Table) -> Self {
+        let root_page_num = table.get_root_page_num();
+        let root_page = table.pager.get_page_mut(root_page_num);
+
         Self {
-            table,
-            row_count,
+            page: root_page_num,
+            cell: root_page.cell_count(),
             end_of_table: true,
         }
-    }
-
-    pub fn advance(&mut self) {
-        self.row_count += 1;
-        self.end_of_table = self.row_count >= self.table.get_row_len()
-    }
-
-    pub fn row_count(&self) -> usize {
-        self.row_count
     }
 
     pub fn end_of_table(&self) -> bool {
         self.end_of_table
     }
 
-    pub fn get_cursor_pos(&mut self) -> &mut [u8] {
-        let row_num = self.row_count();
-        self.table.get_cursor_at_pos(row_num)
+    pub fn cell_num(&self) -> usize {
+        self.cell
+    }
+
+    pub fn page(&self) -> usize {
+        self.page
+    }
+
+    pub fn advance(&mut self, table: &mut Table) {
+        let page = table.pager.get_page_mut(self.page);
+        self.cell += 1;
+        self.end_of_table = self.cell >= page.cell_count();
     }
 }

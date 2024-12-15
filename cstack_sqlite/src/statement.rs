@@ -1,6 +1,7 @@
 use crate::{
+    btree::node::NodeError,
     cursor::Cursor,
-    row::{Row, RowSerializationError, ROW_SIZE},
+    row::{Row, RowSerializationError},
     table::Table,
 };
 
@@ -63,32 +64,30 @@ impl Statement {
     }
 
     fn execute_insert(row: &mut Row, mut table: &mut Table) -> Result<(), ExecuteError> {
-        if table.get_row_len() >= table.max_rows() {
-            return Err(ExecuteError::TableFull);
-        }
+        let cursor = Cursor::end(&mut table);
+        let mut page = table.pager.get_page_mut(cursor.page());
 
-        let mut cursor = Cursor::end(&mut table);
-        let cursor_pos = cursor.get_cursor_pos();
-
-        row.serialize(&mut cursor_pos[..ROW_SIZE])
-            .map_err(|e| match e {
+        page.insert(row.id, row, &mut table).map_err(|e| match e {
+            NodeError::SerializationError(se) => match se {
                 RowSerializationError::StringTooLong { field } => {
                     ExecuteError::SerializationFail(format!("String value for '{field}' too long."))
                 }
-            })?;
-
-        table.increment_num_rows();
+            },
+            NodeError::NodeFullInsertError => ExecuteError::TableFull,
+        })?;
 
         Ok(())
     }
 
     fn execute_select(mut table: &mut Table) -> Result<(), ExecuteError> {
         let mut cursor = Cursor::start(&mut table);
+
         while !cursor.end_of_table() {
-            let cursor_pos = cursor.get_cursor_pos();
-            let row = Row::deserialize(&cursor_pos[..ROW_SIZE]);
+            let mut page = table.pager.get_page_mut(cursor.page());
+            let value = page.get_cell_value(cursor.cell_num());
+            let row = Row::deserialize(value);
             println!("{:?}", row);
-            cursor.advance();
+            cursor.advance(&mut table);
         }
         Ok(())
     }
